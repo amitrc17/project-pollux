@@ -2,7 +2,6 @@
 # pyre-strict
 
 
-
 class Image:
     """
     An Image is essentially a photo that can be a raw camera output or an
@@ -16,4 +15,3 @@ class Image:
     @staticmethod
     def load() -> "Image":
         return Image()
-
