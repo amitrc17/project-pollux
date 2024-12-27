@@ -25,10 +25,11 @@ import time
 from abc import ABC, abstractmethod
 from collections import deque
 from random import randint
-from typing import List, Dict
+from typing import List, Dict, Union
 from pyre_extensions import override
 from llm.llm_engine import LLM_ENGINE as llm
 import logging
+import json
 
 # logging.root.setLevel(logging.NOTSET)
 logging.basicConfig(level=logging.INFO)
@@ -44,13 +45,38 @@ class PID(int):
 
     A randomized integer between 1 and 2**32.
 
+    If the constructor is passed an integer then the ID
+    is set to that integer, otherwise a random number is
+    chosen between 1 and 2**32.
+
     TODO: Change this to Integer value of SHA hash
     """
 
     def __new__(cls, *args, **kwargs) -> "PID":
-        self: PID = super().__new__(cls, randint(1, 2**32))
-        self.ptype = args[0].__class__
+        if len(args) == 1:
+            self: PID = super().__new__(cls, randint(1, 2**32))
+        else:
+            self: PID = super().__new__(cls, args[1])
+        self.ptype = type(args[0]).__name__
         return self
+
+    def serialize(self) -> str:
+        return f"{self.ptype}:{self}"
+
+    @classmethod
+    def deserialize(cls, *args, **kwargs) -> "PID":
+        assert len(args) >= 1, "We need serialized string to be present"
+        serialized_str: str = args[0]
+
+        split_string: List[str] = serialized_str.split(":")
+        assert (
+            len(split_string) == 2
+        ), f"Serialized PID should be of format <ptype>:<ID>, got string {serialized_str}"  # noqa
+
+        ptype, id = tuple(split_string)
+        ret: PID = PID(id, id)  # Yes, that first id is a dummy
+        ret.ptype = ptype
+        return ret
 
 
 class Node(ABC):
@@ -58,11 +84,12 @@ class Node(ABC):
     A Node within the forest. Can be any sort of concept: Asset or Descriptor.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, name) -> None:
         self.id: PID = PID(self)
         self.creation_time: float = time.time()
         self.update_time: float = self.creation_time
         self.edges: List[PID] = []
+        self.name: str = name
 
         # Important!! This will add all nodes (users, descriptors, assets)
         # to an in memory cache for fast lookup and graph traversal.
@@ -72,6 +99,7 @@ class Node(ABC):
     def add_edge(self, node_id: PID) -> None:
         self.edge_validation(node_id)
         self.edges.append(node_id)
+        self.update_time = time.time()
 
     @abstractmethod
     def edge_validation(self, node_id: PID) -> None:
@@ -81,9 +109,36 @@ class Node(ABC):
         """
         raise NotImplementedError("Nodes must implement Edge Validation")
 
-    @abstractmethod
     def serialize(self) -> str:
-        pass
+        data: Dict[str, Union[str, List[str]]] = {
+            "id": self.id.serialize(),
+            "creation_time": self.creation_time,
+            "update_time": self.update_time,
+            "edges": [x.serialize() for x in self.edges],
+            "name": self.name,
+        }
+        return json.dumps(data)
+
+    @classmethod
+    def deserialize(cls, seralized: str) -> "Node":
+        data: Dict[str, Union[str, List[str]]] = json.loads(seralized)
+        id: PID = PID.deserialize(data["id"])
+        edges: List[PID] = [PID.deserialize(x) for x in data["edges"]]
+        if id.ptype == Descriptor.__name__:
+            n = Descriptor(data["name"])
+        elif id.ptype == Asset.__name__:
+            n = Asset(data["name"])
+        elif id.ptype == User.__name__:
+            n = User(data["name"])
+        else:
+            raise NotImplementedError(
+                f"The deserialized ptype is not supported: {id.ptype}"
+            )
+        n.creation_time = data["creation_time"]
+        n.update_time = data["update_time"]
+        n.id = id
+        n.edges = edges
+        return n
 
 
 class Edge:
@@ -98,49 +153,45 @@ class Edge:
 class Asset(Node):
     def __init__(self, name: str):
         # This will initialize the ID
-        super().__init__()
-        self.name: str = name
+        super().__init__(name)
 
     @override
     def edge_validation(self, node_id: PID) -> None:
-        assert node_id.ptype in [Descriptor], "All assets must be"
+        assert node_id.ptype in [Descriptor.__name__], "All assets must be"
         " leaf nodes in the forest so can only have edges coming"
         " from Descriptors"
 
     @override
     def serialize(self) -> str:
-        return self.name
+        return super().serialize()
 
 
 class Descriptor(Node):
     def __init__(self, name: str):
         # This will initialize the ID
-        super().__init__()
-        self.name: str = name
-        self.edges: List[PID] = []
+        super().__init__(name)
 
     @override
     def edge_validation(self, node_id: PID) -> None:
         assert node_id.ptype in [
-            Descriptor,
-            Asset,
-            User,
+            Descriptor.__name__,
+            Asset.__name__,
+            User.__name__,
         ], f"Descriptors are internal nodes and can have edges to Descriptors, Assets or Users only. Found ptype: {node_id.ptype}"  # noqa
 
     @override
     def serialize(self) -> str:
-        return self.name
+        return super().serialize()
 
 
 class User(Node):
-    def __init__(self, username: str) -> None:
-        super().__init__()
-        self.username: str = username
+    def __init__(self, name: str) -> None:
+        super().__init__(name)
 
     @override
     def edge_validation(self, node_id: PID) -> None:
         assert node_id.ptype in [
-            Descriptor
+            Descriptor.__name__
         ], "Users must only have edges to Descriptors, for now Users cannot directly link to Assets"  # noqa
 
     def _level_order_traversal(self) -> List[List[str]]:
@@ -173,7 +224,7 @@ class User(Node):
         buckets = []
         name_to_id_mapping: Dict[str, PID] = {}
         for child_id in cur.edges:
-            if child_id.ptype in [Asset]:
+            if child_id.ptype in [Asset.__name__]:
                 # no need to visit Asset nodes
                 continue
 
@@ -220,7 +271,7 @@ class User(Node):
 
     @override
     def serialize(self) -> str:
-        return self.username
+        return super().serialize()
 
     def consume(self, asset: Asset) -> None:
         LOGGER.info("Begin traversal...")
