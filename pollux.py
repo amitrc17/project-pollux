@@ -51,10 +51,11 @@ def test_asset_ingestion():
     appliance_category.add_edge(indoor_category.id)
     appliance_category.add_edge(outdoor_category.id)
     user.add_edge(appliance_category.id)
-    washing_machine = Asset("Lawnmower")
+    washing_machine = Asset("washing machine")
     user.consume(washing_machine)
 
     print(f"Serialized tree: {user.serialize_forest()}")
+    print(f"Serialized user: {user.serialize()}")
 
 
 def test_database_get_put():
@@ -67,9 +68,9 @@ def test_database_get_put():
     user.add_edge(furniture_category.id)
 
     print("Performing DB operations...")
-    ndb = NodeDB()
-    ndb.set(user)
-    res = ndb.get(user.id)
+    ndb = NodeDB(verbose=True)
+    ndb.set(user.id.serialize(), user.serialize())
+    res: Node = Node.from_id(user.id)
     print(f"Final result from db: {res.serialize()}")
 
 
@@ -104,4 +105,4 @@ def test_serialize_deserialize_nodes():
 
 
 if __name__ == "__main__":
-    test_database_get_put()
+    test_asset_ingestion()

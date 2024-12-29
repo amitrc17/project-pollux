@@ -3,7 +3,7 @@
 
 import base64
 import os
-from abc import ABC
+from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Dict, List, Optional
 
@@ -34,15 +34,19 @@ class LLM(ABC):
     def __init__(self, engine_type: LlmEngineType) -> None:
         self.engine_type: LlmEngineType = engine_type
 
+    @abstractmethod
     def get_response(self, prompt: str) -> str:
         pass
 
+    @abstractmethod
     def describe_image(self, image_path: str) -> str:
         pass
 
+    @abstractmethod
     def find_bucket(self, buckets: List[str], asset_name: str) -> str:
         pass
 
+    @abstractmethod
     def suggest_bucket(self, buckets: List[str], asset_name: str) -> str:
         pass
 
@@ -65,6 +69,7 @@ class OpenAILLM(LLM):
             HumanMessage(prompt),
         ]
         resp: BaseMessage = self.model.invoke(messages)
+        assert isinstance(resp.content, str)
         return resp.content
 
     @override
@@ -85,9 +90,7 @@ class OpenAILLM(LLM):
                     [
                         {
                             "type": "image_url",
-                            "image_url": {
-                                "url": "data:image/jpeg;base64,{image_data}"
-                            },  # noqa
+                            "image_url": {"url": "data:image/jpeg;base64,{image_data}"},
                         }
                     ],
                 ),
@@ -95,6 +98,7 @@ class OpenAILLM(LLM):
         )
         chain = prompt | self.model
         resp: BaseMessage = chain.invoke({"image_data": image_data})
+        assert isinstance(resp.content, str)
         return resp.content
 
     @override
@@ -117,6 +121,7 @@ class OpenAILLM(LLM):
         )
         chain = prompt | self.model
         resp: BaseMessage = chain.invoke({"asset_name": asset_name})
+        assert isinstance(resp.content, str)
         return resp.content
 
     @override
