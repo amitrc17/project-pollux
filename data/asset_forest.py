@@ -21,17 +21,18 @@
     came from User inputs: image, text, chat.
 """
 
+from hashlib import sha256
 import time
 from abc import ABC, abstractmethod
 from collections import deque
 from random import randint
-from typing import Any, List, Dict, Union
+from typing import Any, List, Dict, Optional, Union
 from pyre_extensions import override
 from llm.llm_engine import LLM_ENGINE as llm
 import logging
 import json
 
-from .database import NodeDB
+from .database import NodeDB, UserDB
 
 # logging.root.setLevel(logging.NOTSET)
 logging.basicConfig(level=logging.INFO)
@@ -169,8 +170,11 @@ class Node(ABC):
         return n
 
     @classmethod
-    def from_id(cls, node_id: PID) -> "Node":
+    def from_id(cls, node_id: Union[PID, str]) -> "Node":
         ndb = NodeDB()
+        if isinstance(node_id, str):
+            node_id = PID.deserialize(node_id)
+        assert isinstance(node_id, PID)
         serilaized_result: str = ndb.get(node_id.serialize())
         return Node.deserialize(serilaized_result)
 
@@ -230,6 +234,33 @@ class User(Node):
         assert node_id.ptype in [
             Descriptor.__name__
         ], f"Users must only have edges to Descriptors, for now Users cannot directly link to Assets, given ptype: {node_id.ptype}"  # noqa
+
+    @classmethod
+    def login(cls, user_name: str, password: str) -> "User":
+        # Check if user exists in DB
+        udb: UserDB = UserDB()
+        user_id: Optional[str] = udb.get(
+            sha256((user_name + password).encode()).hexdigest()
+        )
+        assert user_id is not None, "user not found"
+
+        # pull user from Node DB
+        user: Node = Node.from_id(user_id)
+        assert isinstance(user, User)
+        return user
+
+    @classmethod
+    def register(cls, user_name: str, password: str) -> "User":
+        udb: UserDB = UserDB()
+        hashed_password: str = sha256((user_name + password).encode()).hexdigest()
+
+        # check if user already exists
+        existing_user_id: Optional[str] = udb.get(hashed_password)
+        if existing_user_id is not None:
+            raise RuntimeError("User already exists, please login")
+        user: User = User(user_name)
+        udb.set(hashed_password, user.id.serialize())
+        return user
 
     def _level_order_traversal(self) -> List[List[str]]:
         q = deque([(self.id, 1)])

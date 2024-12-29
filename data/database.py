@@ -9,7 +9,7 @@ Image handles are stored on redis and are keys that are used for
 quick search in mysql.
 """
 
-from typing import Any
+from typing import Any, Optional
 from abc import ABC, abstractmethod
 import redis
 
@@ -33,6 +33,33 @@ class Database(ABC):
 
 class ImageStore(Database):
     pass
+
+
+class UserDB(Database):
+
+    RDB = redis.Redis(host="localhost", port=6379, decode_responses=True)  # noqa
+
+    def __init__(self, verbose: bool = False) -> None:
+        super().__init__()
+        self.verbose: bool = verbose
+
+    @override
+    def get(self, hash: str) -> Optional[str]:
+        if self.verbose:
+            print("Reading db...")
+        user_id: Any = UserDB.RDB.get(hash)
+        return user_id
+
+    @override
+    def set(self, hash: str, user_id: str) -> bool:
+        if self.verbose:
+            print("writing to db...")
+        if self.verbose:
+            print(f"DB Payload: {user_id}")
+            print(f"DB Key: {hash}")
+        ret: Any = NodeDB.RDB.set(hash, user_id)
+        assert isinstance(ret, bool)
+        return ret
 
 
 class NodeDB(Database):

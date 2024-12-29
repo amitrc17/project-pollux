@@ -104,5 +104,28 @@ def test_serialize_deserialize_nodes():
     print(f"Final asset: {asset_deserial.serialize()}")
 
 
+def test_user_load(asset_name: str) -> None:
+    assert asset_name != "", "Please provide a valid asset name"
+    new_asset: Asset = Asset(asset_name)
+    user: Node = Node.from_id("User:2263816597")
+    assert isinstance(user, User)
+    user.consume(new_asset)
+    print(f"Serialized User tree: {user.serialize_forest()}")
+
+
+def test_user_login(username: str, user_password: str) -> None:
+    assert username != "", "Please provide a valid username"
+    assert user_password != "", "Please provide a valid password"
+    user: User = User.login(username, user_password)
+    print(f"Serialized User tree: {user.serialize_forest()}")
+
+
+def test_user_register(username: str, user_password: str) -> None:
+    assert username != "", "Please provide a valid username"
+    assert user_password != "", "Please provide a valid password"
+    user: User = User.register(username, user_password)
+    print(f"Serialized User tree: {user.serialize_forest()}")
+
+
 if __name__ == "__main__":
-    test_asset_ingestion()
+    test_user_login("amitrc", "password")
