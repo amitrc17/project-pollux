@@ -2,7 +2,9 @@
 # pyre-strict
 
 from llm.llm_engine import OpenAILLM
-from data.asset_forest import User, Descriptor, Asset
+from data.asset_forest import User, Descriptor, Asset, Node
+
+from data.database import NodeDB
 
 
 def test_serialize_tree():
@@ -49,11 +51,81 @@ def test_asset_ingestion():
     appliance_category.add_edge(indoor_category.id)
     appliance_category.add_edge(outdoor_category.id)
     user.add_edge(appliance_category.id)
-    washing_machine = Asset("Lawnmower")
+    washing_machine = Asset("washing machine")
     user.consume(washing_machine)
 
     print(f"Serialized tree: {user.serialize_forest()}")
+    print(f"Serialized user: {user.serialize()}")
+
+
+def test_database_get_put():
+    print("Creating User...")
+    user = User("amitrc")
+    print("Building forest...")
+    appliance_category = Descriptor("appliance")
+    furniture_category = Descriptor("furniture")
+    user.add_edge(appliance_category.id)
+    user.add_edge(furniture_category.id)
+
+    print("Performing DB operations...")
+    ndb = NodeDB(verbose=True)
+    ndb.set(user.id.serialize(), user.serialize())
+    res: Node = Node.from_id(user.id)
+    print(f"Final result from db: {res.serialize()}")
+
+
+def test_serialize_deserialize_nodes():
+    print("Creating User...")
+    user = User("amitrc")
+    print("Building forest...")
+    appliance_category = Descriptor("appliance")
+    furniture_category = Descriptor("furniture")
+    asset = Asset("hair dryer")
+    appliance_category.add_edge(asset.id)
+    user.add_edge(appliance_category.id)
+    user.add_edge(furniture_category.id)
+
+    user_serial = user.serialize()
+    print(f"Serialized User: {user_serial}")
+    print("Deserializing user ...")
+    user_deserial = Node.deserialize(user_serial)
+    print(f"Final User: {user_deserial.serialize()}")
+
+    descriptor_serial = appliance_category.serialize()
+    print(f"Serialized descriptor: {descriptor_serial}")
+    print("Deserializing descriptor ...")
+    descriptor_deserial = Node.deserialize(descriptor_serial)
+    print(f"Final descriptor: {descriptor_deserial.serialize()}")
+
+    asset_serial = asset.serialize()
+    print(f"Serialized asset: {asset_serial}")
+    print("Deserializing asset ...")
+    asset_deserial = Node.deserialize(asset_serial)
+    print(f"Final asset: {asset_deserial.serialize()}")
+
+
+def test_user_load(asset_name: str) -> None:
+    assert asset_name != "", "Please provide a valid asset name"
+    new_asset: Asset = Asset(asset_name)
+    user: Node = Node.from_id("User:2263816597")
+    assert isinstance(user, User)
+    user.consume(new_asset)
+    print(f"Serialized User tree: {user.serialize_forest()}")
+
+
+def test_user_login(username: str, user_password: str) -> None:
+    assert username != "", "Please provide a valid username"
+    assert user_password != "", "Please provide a valid password"
+    user: User = User.login(username, user_password)
+    print(f"Serialized User tree: {user.serialize_forest()}")
+
+
+def test_user_register(username: str, user_password: str) -> None:
+    assert username != "", "Please provide a valid username"
+    assert user_password != "", "Please provide a valid password"
+    user: User = User.register(username, user_password)
+    print(f"Serialized User tree: {user.serialize_forest()}")
 
 
 if __name__ == "__main__":
-    test_asset_ingestion()
+    test_user_login("amitrc", "password")
