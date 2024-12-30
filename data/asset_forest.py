@@ -21,18 +21,23 @@
     came from User inputs: image, text, chat.
 """
 
+import base64
 from hashlib import sha256
+from io import BufferedReader
 import time
+import uuid
 from abc import ABC, abstractmethod
 from collections import deque
 from random import randint
 from typing import Any, List, Dict, Optional, Union
+import uuid
+from openai import images
 from pyre_extensions import override
 from llm.llm_engine import LLM_ENGINE as llm
 import logging
 import json
 
-from .database import NodeDB, UserDB
+from .database import NodeDB, UserDB, ImageStore
 
 # logging.root.setLevel(logging.NOTSET)
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +70,18 @@ class PID(int):
     def serialize(self) -> str:
         return f"{self.ptype}:{self}"
 
+    @override
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, PID):
+            return NotImplemented
+        if self.serialize() == value.serialize():
+            return True
+        return False
+
+    @override
+    def __hash__(self) -> int:
+        return hash(self.serialize())
+
     @classmethod
     def deserialize(cls, *args, **kwargs) -> "PID":
         assert len(args) >= 1, "We need serialized string to be present"
@@ -83,22 +100,30 @@ class PID(int):
 
 class Node(ABC):
     """
-    A Node within the forest. Can be any sort of concept: Asset or Descriptor.
+    A pollux entity. The base class for all objects within the Pollux
+    universe. All Nodes have a unique ID (PID), a creation time, an update time
+    and are connected to other nodes via edges.
+
+    For now, edges themselves are logical constructs and don't have
+    an explicit representation. Nodes store connections as a raw list of
+    PIDs that they are connected to.
     """
 
-    def __init__(self, name) -> None:
+    def __init__(self, name: str, disable_commit: bool = False) -> None:
         self.id: PID = PID(self)
         self.creation_time: float = time.time()
         self.update_time: float = self.creation_time
         self.edges: List[PID] = []
         self.name: str = name
-        self.commit()
+        if not disable_commit:
+            self.commit()
 
-    def add_edge(self, node_id: PID) -> None:
+    def add_edge(self, node_id: PID, disable_commit: bool = False) -> None:
         self.edge_validation(node_id)
         self.edges.append(node_id)
         self.update_time = time.time()
-        self.commit()
+        if not disable_commit:
+            self.commit()
 
     @abstractmethod
     def edge_validation(self, node_id: PID) -> None:
@@ -154,11 +179,19 @@ class Node(ABC):
         edges: List[PID] = [PID.deserialize(x) for x in data["edges"]]  # type: ignore
         # TODO: This should be calling deserialize from the child class
         if id.ptype == Descriptor.__name__:
-            n = Descriptor(str(data["name"]))
+            n = Descriptor(str(data["name"]), disable_commit=True)
         elif id.ptype == Asset.__name__:
-            n = Asset(str(data["name"]))
+            n = Asset(str(data["name"]), disable_commit=True)
         elif id.ptype == User.__name__:
-            n = User(str(data["name"]))
+            n = User(str(data["name"]), disable_commit=True)
+        elif id.ptype == Image.__name__:
+            # Special treatment for Image to load image data properly
+            n = Image(image_data="placeholder_image_data", disable_commit=True)
+            image_data: Optional[str] = ImageStore().get(id.serialize())
+            assert (
+                image_data is not None
+            ), f"Image not found in Image Store for id: {id.serialize()}"
+            n.image_data = image_data
         else:
             raise NotImplementedError(
                 f"The deserialized ptype is not supported: {id.ptype}"
@@ -179,20 +212,69 @@ class Node(ABC):
         return Node.deserialize(serilaized_result)
 
 
-class Edge:
-    def __init__(self, left: Node, right: Node) -> None:
-        self.left: PID = left.id
-        self.right: PID = right.id
-        self.id: PID = PID(self)
-        left.add_edge(self.right)
-        right.add_edge(self.left)
+class Image(Node):
+    """
+    Image is a special type of Pollux entity that stores image data
+    that users upload. At some point, asset tree nodes and Image nodes
+    should be inherting from different base classes i.e we should make
+    a base class for all asset tree nodes.
+    """
+
+    def __init__(
+        self,
+        image_path: Optional[str] = None,
+        image_data: Optional[str] = None,
+        image_file_buffer: Optional[BufferedReader] = None,
+        disable_commit: bool = False,
+    ) -> None:
+        assert (
+            image_path is not None
+            or image_data is not None
+            or image_file_buffer is not None
+        ), "Need image data, image path or image file buffer to create Image"
+        if image_path is not None:
+            with open(image_path, "rb") as img:
+                self.image_data: str = base64.b64encode(img.read()).decode("utf-8")
+        elif image_data is not None:
+            self.image_data: str = image_data
+        else:
+            self.image_data: str = base64.b64encode(image_file_buffer.read()).decode(  # type: ignore
+                "utf-8"
+            )
+        print("Image data extracted: ", len(self.image_data))
+        # Initialize the Node base params, no need to call
+        # commit because Node.__init__ will do that for us
+        super().__init__(
+            "Image:" + str(uuid.uuid1()),
+            disable_commit=disable_commit,
+        )  # TODO: Figure out a better naming scheme
+
+    @override
+    def commit(self) -> bool:
+        """
+        Images need to be stored in ImageStore, so we do that here.
+        We still want to store images to NodeDB because Images are Nodes,
+        so we call super().commit() to make sure that happens.
+        """
+        print("Committing image to Image Store...")
+        ims = ImageStore()
+        ims.set(self.id.serialize(), self.image_data)
+        print(
+            f"Committed image of size: {len(self.image_data)} and ID: {self.id.serialize()}"
+        )
+        return super().commit()
+
+    @override
+    def edge_validation(self, node_id: PID) -> None:
+        raise RuntimeError("Images cannot have edges, for now")
 
 
 class Asset(Node):
-    def __init__(self, name: str):
+    def __init__(self, name: str, disable_commit: bool = False):
         # This will initialize the ID
-        super().__init__(name)
-        self.commit()
+        super().__init__(name, disable_commit=disable_commit)
+        if not disable_commit:
+            self.commit()
 
     @override
     def edge_validation(self, node_id: PID) -> None:
@@ -206,10 +288,15 @@ class Asset(Node):
 
 
 class Descriptor(Node):
-    def __init__(self, name: str):
+    def __init__(self, name: str, disable_commit: bool = False) -> None:
+        """
+        disable_commit: If set to True, the commit method will not be called,
+        useful for creating dummy objects
+        """
         # This will initialize the ID
-        super().__init__(name)
-        self.commit()
+        super().__init__(name, disable_commit=disable_commit)
+        if not disable_commit:
+            self.commit()
 
     @override
     def edge_validation(self, node_id: PID) -> None:
@@ -225,15 +312,18 @@ class Descriptor(Node):
 
 
 class User(Node):
-    def __init__(self, name: str) -> None:
-        super().__init__(name)
-        self.commit()
+    def __init__(self, name: str, disable_commit: bool = False) -> None:
+        super().__init__(name, disable_commit=disable_commit)
+        if not disable_commit:
+            self.commit()
 
     @override
     def edge_validation(self, node_id: PID) -> None:
         assert node_id.ptype in [
-            Descriptor.__name__
-        ], f"Users must only have edges to Descriptors, for now Users cannot directly link to Assets, given ptype: {node_id.ptype}"  # noqa
+            Descriptor.__name__,
+            Image.__name__,
+        ], f"Users must only have edges to Descriptors or Images, for now Users cannot directly link to Assets, given ptype: {node_id.ptype}"  # noqa
+        assert node_id not in self.edges, "User cannot have duplicate edges"
 
     @classmethod
     def login(cls, user_name: str, password: str) -> "User":
@@ -262,6 +352,67 @@ class User(Node):
         udb.set(hashed_password, user.id.serialize())
         return user
 
+    def attach_image(
+        self,
+        image_path: Optional[str] = None,
+        image_data: Optional[str] = None,
+        image_file_buffer: Optional[BufferedReader] = None,
+        image: Optional[Image] = None,
+    ) -> Image:
+        """
+        Attaches an image to the User making them the owner of the provided image.
+        Many ways to provide the image, check args below to see what you need.
+
+        Args:
+            image_path (Optional[str], optional): Path to raw image file. Defaults to None.
+            image_data (Optional[str], optional): Image read as binary file decoded to string.
+            Defaults to None.
+            image_file_buffer (Optional[BufferedReader], optional): Image binary data opened
+            as bufferedreader object. Defaults to None.
+            image (Optional[Image], optional): An instance of Image class. Defaults to None.
+
+        Raises:
+            RuntimeError: In case none of the supported image sources are provided
+
+        Returns:
+            image: If the image is successfully attached, then we return the image object
+        """
+        assert (
+            image_path is not None
+            or image_data is not None
+            or image_file_buffer is not None
+            or image is not None
+        ), "Need image data, image path, image file buffer or Image object to attach image"
+        if image_path is not None:
+            image_obj: Image = Image(image_path=image_path)
+        elif image_file_buffer is not None:
+            image_obj: Image = Image(image_file_buffer=image_file_buffer)
+        elif image_data is not None:
+            image_obj: Image = Image(image_data=image_data)
+        elif image is not None:
+            image_obj: Image = image
+        else:
+            raise RuntimeError("No valid image source provided")
+
+        self.add_edge(image_obj.id)
+
+        return image_obj
+
+    def get_images(self) -> List[Image]:
+        """
+        Get all images attached to User
+        Returns:
+            List[Image]: A possibly empty list of Image objects
+        """
+        images: List[Image] = []
+        for node_id in self.edges:
+            if node_id.ptype == Image.__name__:
+                node: Node = Node.from_id(node_id)
+                assert isinstance(node, Image)  # This should always be true
+                images.append(node)
+
+        return images
+
     def _level_order_traversal(self) -> List[List[str]]:
         q = deque([(self.id, 1)])
         vis = {self.id}
@@ -275,7 +426,8 @@ class User(Node):
 
             levels[-1].append(node.name)
             for next_node_id in node.edges:
-                if next_node_id not in vis:
+                # We don't want to visit Images
+                if next_node_id not in vis and next_node_id.ptype != Image.__name__:
                     vis.add(next_node_id)
                     q.appendleft((next_node_id, cur_level + 1))
         return levels
@@ -289,8 +441,8 @@ class User(Node):
         buckets: List[str] = []
         name_to_id_mapping: Dict[str, PID] = {}
         for child_id in cur.edges:
-            if child_id.ptype in [Asset.__name__]:
-                # no need to visit Asset nodes
+            if child_id.ptype in [Asset.__name__, Image.__name__]:
+                # no need to visit Asset nodes or Images
                 continue
 
             child: Node = Node.from_id(child_id)
