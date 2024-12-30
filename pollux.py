@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # pyre-strict
 
+from typing import List
 from llm.llm_engine import OpenAILLM
-from data.asset_forest import User, Descriptor, Asset, Node
+from data.asset_forest import PID, User, Descriptor, Asset, Node, Image
 
-from data.database import NodeDB
+from data.database import NodeDB, ImageStore
 
 
 def test_serialize_tree():
@@ -127,5 +128,21 @@ def test_user_register(username: str, user_password: str) -> None:
     print(f"Serialized User tree: {user.serialize_forest()}")
 
 
+def test_image_upload() -> None:
+    print("User login...")
+    user: User = User.login("amitrc", "password8")
+    print("User logged in")
+    print("Attach image to User...")
+    image: Image = user.attach_image(image_path="./data/sample.jpeg")
+    print("Attached image to User")
+    all_images: List[Image] = user.get_images()
+    print(f"Total images found: {len(all_images)}")
+    print(f"Image sizes: {[len(img.image_data) for img in all_images]}")
+    print(f"Image IDs: {[img.id.serialize() for img in all_images]}")
+    print(f"Serialized User: {user.serialize()}")
+    print(f"Attached Image serialized: {image.serialize()}")
+
+
 if __name__ == "__main__":
-    test_user_login("amitrc", "password")
+    # test_user_register("amitrc", "password8")
+    test_image_upload()
