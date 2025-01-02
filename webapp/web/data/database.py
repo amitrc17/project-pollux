@@ -61,6 +61,7 @@ class ImageStore(Database):
             )
             cursor.execute(select_sql, (image_handle,))
             image_data: List[Any] = cursor.fetchall()
+            print(f"Length image data:::: {len(image_data)}")
             assert (
                 len(image_data) <= 1
             ), f"There shouldn't be 2 or more images for given handle: {image_handle}. Found: {len(image_data)}"

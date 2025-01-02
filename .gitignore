@@ -70,6 +70,10 @@ webapp/web/node_modules
 .pnp.js
 webapp/web/build
 webapp/.DS_Store
+images.db
+webapp/images.db
+webapp/dump.rdb
+.DS_Store
 
 # Scrapy stuff:
 .scrapy

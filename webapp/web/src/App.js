@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import star from './star1.svg';
 import './App.css';
+import axios from 'axios';
 
 function LoginForm({ userData, setUserData }) {
   const [username, setUsername] = useState('');
@@ -41,9 +42,39 @@ function LoginForm({ userData, setUserData }) {
   );
 }
 
+function FileUploader({ userData, setImageData }) {
+
+  const handleSubmit = async (event) => {
+    event.preventDefault(); // Prevent default form submission behavior
+    const formData = new FormData();
+    formData.append('file', event.target.file.files[0]);
+    formData.append('userid', userData.id);
+    const response = await axios.post(
+      '/upload',
+      formData,
+      {
+        headers: {
+        'Content-Type': 'multipart/form-data',
+        },
+      });
+
+    const data = response.data;
+    console.log(data);
+    setImageData(data);
+  }
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="file" name="file" />
+      <button type="submit" value="Upload">Upload</button>
+    </form>
+  );
+}
+
+
 function App() {
   // const [message, setMessage] = useState("Something");
   const [userData, setUserData] = useState(null);
+  const [imageData, setImageData] = useState(null);
 
   // useEffect(() => { 
   //   fetch('/message')
@@ -60,8 +91,20 @@ function App() {
             <p>
               Welcome to Pollux
             </p>
-            <p>Logged in User ID: {userData.id}</p>
-            <p>User data: { userData.edges }</p>
+            <p>Logged in User: {userData.name} (ID:{userData.id.split(":")[1]})</p>
+            <div>
+              <h4>What Do We Do</h4>
+              <div>
+                <FileUploader userData={userData} setImageData={setImageData} />
+                {imageData && imageData.success === "yes" && <p>{imageData.id} Uploaded</p>}
+                {imageData && imageData.success === "no" && <p>Upload Failed!</p>}
+                <br />
+                <button>View Asset Tree</button>
+              </div>
+            </div>
+            <div>
+              <button onClick={() => setUserData(null)}>Logout</button>
+            </div>
           </header>
         </div>
       );
