@@ -64,6 +64,12 @@ db.sqlite3-journal
 # Flask stuff:
 instance/
 .webassets-cache
+webapp/node_modules
+webapp/web/node_modules
+/.pnp
+.pnp.js
+webapp/web/build
+webapp/.DS_Store
 
 # Scrapy stuff:
 .scrapy
