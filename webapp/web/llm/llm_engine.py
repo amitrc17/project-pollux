@@ -146,7 +146,7 @@ class OpenAILLM(LLM):
                     "system",
                     "Which of these buckets should the given object"
                     "belong? If you think it's neither, please reply with "
-                    "neither. Only say one word which is the answer. "
+                    f"{self.EMPTY_BUCKET_STRING}. Only say one word which is the answer. "
                     f"\n buckets: {buckets_str}",
                 ),
                 (
@@ -196,7 +196,7 @@ class OpenAILLM(LLM):
                     "A sub-category and category have an is-a relationship. "
                     "For example, 'Gardening Tools' is a sub-category of 'Tools'. "
                     "However, 'Tools' is not a sub-category of 'Gardening Tools'. "
-                    "If none of the potential sub-categories are applicable, please reply with 'neither'. "
+                    f"If none of the potential sub-categories are applicable, please reply with '{self.EMPTY_BUCKET_STRING}'. "
                     "Only reply with the category names as a comma separated list. "
                     f"\n Base Category: {target_bucket} \n Potential Sub-Categories: {buckets_str}",
                 )

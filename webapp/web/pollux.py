@@ -37,7 +37,9 @@ def test_find_bucket():
     llm = OpenAILLM()
     print("LLM Loaded.")
     result = llm.find_bucket(
-        ["indoor appliance", "outdoor appliance"], "garden chair"
+        # ["indoor appliance", "outdoor appliance"], "appliances"
+        ["car", "vehicle"],
+        "motorcycle",
     )  # noqa
     print(f"LLM Response-> bucket: {result}")
 
@@ -77,19 +79,26 @@ def test_merge_buckets():
 
 
 def test_asset_ingestion():
-    print("Creating User...")
-    user = User("amitrc")
-    print("Building forest...")
-    appliance_category = Descriptor("appliance")
-    indoor_category = Descriptor("indoor appliance")
-    outdoor_category = Descriptor("outdoor appliance")
-    appliance_category.add_edge(indoor_category.id)
-    appliance_category.add_edge(outdoor_category.id)
-    user.add_edge(appliance_category.id)
-    washing_machine = Asset("washing machine")
+    print("Logging in User...")
+    user: User = User.login("amitrc", "password9")
+    print("Building As...")
+    washing_machine = Asset("wooden table")
+    print(f"Serialized tree: {user.serialize_forest()}")
     user.consume(washing_machine)
 
+    print(f"Serialized tree after: {user.serialize_forest()}")
+    print(f"Serialized user: {user.serialize()}")
+
+
+def test_descriptor_ingestion():
+    print("Logging in User...")
+    user: User = User.login("amitrc", "password9")
+    print("Making descriptor...")
+    wooden_furniture_category = Descriptor("Wooden furniture")
     print(f"Serialized tree: {user.serialize_forest()}")
+    user.consume(wooden_furniture_category)
+
+    print(f"Serialized tree after: {user.serialize_forest()}")
     print(f"Serialized user: {user.serialize()}")
 
 
@@ -182,7 +191,10 @@ if __name__ == "__main__":
     # test_user_login("amitrc", "password8")
     # test_find_sub_buckets()
     # test_expand_bucket()
-    test_merge_buckets()
+    # test_merge_buckets()
+    # test_find_bucket()
+    # test_asset_ingestion()
+    test_descriptor_ingestion()
     # test_show_images()
     # image_data: Optional[str] = ImageStore().get("Image:18041440")
     # assert image_data is not None, "Image data not found"
