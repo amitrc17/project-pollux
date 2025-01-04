@@ -42,6 +42,40 @@ def test_find_bucket():
     print(f"LLM Response-> bucket: {result}")
 
 
+def test_find_sub_buckets():
+    print("Loading LLM...")
+    llm = OpenAILLM()
+    print("LLM Loaded.")
+    result = llm.find_sub_buckets(
+        ["appliance", "vehicle", "chairs", "tables"], "furniture"
+    )
+    print(f"LLM Response-> sub buckets: {result}")
+    result = llm.find_sub_buckets(["appliance", "vehicle", "chairs", "tables"], "car")
+    print(f"LLM Response-> sub buckets: {result}")
+
+
+def test_expand_bucket():
+    print("Loading LLM...")
+    llm = OpenAILLM()
+    print("LLM Loaded.")
+    result = llm.expand_bucket(["appliance"], "furniture")
+    print(f"LLM Response-> expanded bucket: {result}")
+    result = llm.expand_bucket(
+        ["chair", "table", "pot", "pan", "cookware", "fan"], "furniture"
+    )
+    print(f"LLM Response-> expanded bucket: {result}")
+
+
+def test_merge_buckets():
+    print("Loading LLM...")
+    llm = OpenAILLM()
+    print("LLM Loaded.")
+    result = llm.merge_buckets(["chair", "table", "pot", "pan", "cookware", "sofa"])
+    print(f"LLM Response-> merged bucket: {result}")
+    result = llm.merge_buckets(["motorcycle", "car"])
+    print(f"LLM Response-> merged bucket: {result}")
+
+
 def test_asset_ingestion():
     print("Creating User...")
     user = User("amitrc")
@@ -144,5 +178,13 @@ def test_image_upload() -> None:
 
 
 if __name__ == "__main__":
-    # test_user_register("amitrc", "password8")
-    test_image_upload()
+    # test_user_register("amitrc", "password9")
+    # test_user_login("amitrc", "password8")
+    # test_find_sub_buckets()
+    # test_expand_bucket()
+    test_merge_buckets()
+    # test_show_images()
+    # image_data: Optional[str] = ImageStore().get("Image:18041440")
+    # assert image_data is not None, "Image data not found"
+    # print(f"Length of Image data: {len(image_data)}")
+    # test_image_upload()
