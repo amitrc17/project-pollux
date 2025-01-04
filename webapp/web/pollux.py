@@ -28,7 +28,7 @@ def test_describe_image():
     print("Loading LLM...")
     llm = OpenAILLM()
     print("LLM Loaded.")
-    result: str = llm.describe_image("./data/sample.jpeg")
+    result: str = llm.describe_image(image_path="./data/sample.jpeg")
     print(f"LLM Response-> ./data/sample.jpeg: {result}")
 
 
@@ -80,9 +80,17 @@ def test_merge_buckets():
 
 def test_asset_ingestion():
     print("Logging in User...")
-    user: User = User.login("amitrc", "password9")
+    user: User = User.login("amitrc", "password12")
     print("Building As...")
-    washing_machine = Asset("wooden table")
+    appliance_category = Descriptor("appliance")
+    indoor_category = Descriptor("indoor appliance")
+    outdoor_category = Descriptor("outdoor appliance")
+    appliance_category.add_edge(indoor_category.id)
+    appliance_category.add_edge(outdoor_category.id)
+    washing_machine = Asset("washing machine")
+    hair_dryer = Asset("hair dryer")
+    indoor_category.add_edge(hair_dryer.id)
+    user.add_edge(appliance_category.id)
     print(f"Serialized tree: {user.serialize_forest()}")
     user.consume(washing_machine)
 
@@ -173,7 +181,7 @@ def test_user_register(username: str, user_password: str) -> None:
 
 def test_image_upload() -> None:
     print("User login...")
-    user: User = User.login("amitrc", "password8")
+    user: User = User.login("amitrc", "password12")
     print("User logged in")
     print("Attach image to User...")
     image: Image = user.attach_image(image_path="./data/sample.jpeg")
@@ -184,19 +192,21 @@ def test_image_upload() -> None:
     print(f"Image IDs: {[img.id.serialize() for img in all_images]}")
     print(f"Serialized User: {user.serialize()}")
     print(f"Attached Image serialized: {image.serialize()}")
+    print(f"Serialized tree: {user.serialize_forest()}")
 
 
 if __name__ == "__main__":
-    # test_user_register("amitrc", "password9")
+    # test_user_register("amitrc", "password12")
     # test_user_login("amitrc", "password8")
     # test_find_sub_buckets()
     # test_expand_bucket()
     # test_merge_buckets()
     # test_find_bucket()
     # test_asset_ingestion()
-    test_descriptor_ingestion()
+    # test_descriptor_ingestion()
+    # test_describe_image()
     # test_show_images()
     # image_data: Optional[str] = ImageStore().get("Image:18041440")
     # assert image_data is not None, "Image data not found"
     # print(f"Length of Image data: {len(image_data)}")
-    # test_image_upload()
+    test_image_upload()

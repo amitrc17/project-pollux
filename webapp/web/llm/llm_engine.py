@@ -42,7 +42,9 @@ class LLM(ABC):
         pass
 
     @abstractmethod
-    def describe_image(self, image_path: str) -> str:
+    def describe_image(
+        self, image_path: Optional[str] = None, image_data: Optional[str] = None
+    ) -> str:
         """
         Ask LLM to extract objects from the image
         """
@@ -109,9 +111,14 @@ class OpenAILLM(LLM):
         return resp.content
 
     @override
-    def describe_image(self, image_path: str) -> str:
-        with open(image_path, "rb") as img:
-            image_data = base64.b64encode(img.read()).decode("utf-8")
+    def describe_image(
+        self, image_path: Optional[str] = None, image_data: Optional[str] = None
+    ) -> str:
+        if image_path is None and image_data is None:
+            raise ValueError("Either image_path or image_data must be provided")
+        if image_path is not None:
+            with open(image_path, "rb") as img:
+                image_data = base64.b64encode(img.read()).decode("utf-8")
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -119,7 +126,7 @@ class OpenAILLM(LLM):
                     "system",
                     "What are the objects in this image? Please only "
                     "list out the objects, without any other "
-                    "details.",
+                    "details. The output should be a comma separated list. ",
                 ),
                 (
                     "user",
@@ -169,6 +176,7 @@ class OpenAILLM(LLM):
                     "system",
                     "Suggest a new bucket which is better suited for the given object. "  # noqa
                     "Only reply with the new suggested bucket name please. "
+                    "Make sure the new bucket is not in the provided list. "  # noqa
                     "Bucket names can have multiple words, if they do they are "  # noqa
                     "space separated, for example 'Gardening Tools'"
                     f"\n buckets: {buckets_str}",

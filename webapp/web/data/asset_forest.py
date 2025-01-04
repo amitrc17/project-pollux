@@ -401,6 +401,12 @@ class User(Node):
             raise RuntimeError("No valid image source provided")
 
         self.add_edge(image_obj.id)
+        asset_names: List[str] = llm.describe_image(
+            image_data=image_obj.image_data
+        ).split(",")
+        for asset_name in asset_names:
+            asset: Asset = Asset(asset_name)
+            self.consume(asset)
 
         return image_obj
 
@@ -461,6 +467,11 @@ class User(Node):
             buckets.append(child_str)
             name_to_id_mapping[child_str.lower().strip()] = child_id
 
+        if node.name.lower().strip() in name_to_id_mapping:
+            # If the Asset already exists in the tree, we don't need to do anything
+            # and can just return
+            return
+
         response: str = ""
         if len(buckets) == 0:
             # No edges to any descriptors
@@ -472,7 +483,9 @@ class User(Node):
         if response.lower().strip() in name_to_id_mapping:
             # In case llm responds with an existing bucket
             # continue DFS into child
-            self._dfs(Node.from_id(name_to_id_mapping[response.lower().strip()]), node)
+            return self._dfs(
+                Node.from_id(name_to_id_mapping[response.lower().strip()]), node
+            )
         elif response.lower() == llm.EMPTY_BUCKET_STRING.lower():
             assert (
                 len(buckets) > 0
@@ -482,6 +495,12 @@ class User(Node):
                     buckets=buckets, asset_name=node.name
                 )
                 LOGGER.info(f"Suggest creating bucket: {new_bucket_name}")
+                if new_bucket_name.lower().strip() in name_to_id_mapping:
+                    # The suggested bucket already exists, so we can just
+                    # add the asset to that bucket
+                    return self._dfs(
+                        Node.from_id(name_to_id_mapping[response.lower().strip()]), node
+                    )
                 # create a new descriptor (i.e a bucket)
                 new_node = Descriptor(new_bucket_name)
                 # Add edge from parent to new descriptor
@@ -505,12 +524,16 @@ class User(Node):
                 ):
                     # None of the sub buckets match the bucket so the bucket
                     # can be a direct child of current node
+                    LOGGER.info("No sub buckets found, adding directly to parent")
                     cur.add_edge(node.id)
                     return
                 else:
                     # LLM returned some sub buckets, so we need to add the
                     # descriptor as a child of the current node and then add
                     # the sub buckets as children of the descriptor
+                    LOGGER.info(
+                        f"Found sub buckets: {sub_buckets} matching bucket: {node.name}"
+                    )  # noqa
                     cur.add_edge(node.id)
                     for sub_bucket in sub_buckets:
                         assert (
