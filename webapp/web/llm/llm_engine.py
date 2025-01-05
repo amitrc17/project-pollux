@@ -36,18 +36,56 @@ class LLM(ABC):
 
     @abstractmethod
     def get_response(self, prompt: str) -> str:
+        """
+        Generic method to get response from the LLM engine
+        """
         pass
 
     @abstractmethod
-    def describe_image(self, image_path: str) -> str:
+    def describe_image(
+        self, image_path: Optional[str] = None, image_data: Optional[str] = None
+    ) -> str:
+        """
+        Ask LLM to extract objects from the image
+        """
         pass
 
     @abstractmethod
     def find_bucket(self, buckets: List[str], asset_name: str) -> str:
+        """
+        Ask LLM to find which of the buckets (Descriptor) the asset belongs to.
+        Usually it has to pick the most-fitting bucket or return "neither"
+        """
         pass
 
     @abstractmethod
     def suggest_bucket(self, buckets: List[str], asset_name: str) -> str:
+        """
+        Ask LLM to suggest a new bucket (not among the ones provided) that
+        is better suited for the asset.
+        """
+        pass
+
+    @abstractmethod
+    def find_sub_buckets(self, buckets: List[str], target_bucket: str) -> str:
+        """
+        Ask LLM to find which of the provided buckets are sub-buckets of the target bucket.
+        """
+        pass
+
+    @abstractmethod
+    def expand_bucket(self, buckets: List[str], target_bucket: str) -> List[str]:
+        """
+        Ask LLM to expand a the target bucket into more granular buckets such that
+        none of them are within the provided buckets.
+        """
+        pass
+
+    @abstractmethod
+    def merge_buckets(self, buckets: List[str]) -> str:
+        """
+        Ask LLM to merge the provided granualr buckets into a single broad bucket.
+        """
         pass
 
 
@@ -73,9 +111,14 @@ class OpenAILLM(LLM):
         return resp.content
 
     @override
-    def describe_image(self, image_path: str) -> str:
-        with open(image_path, "rb") as img:
-            image_data = base64.b64encode(img.read()).decode("utf-8")
+    def describe_image(
+        self, image_path: Optional[str] = None, image_data: Optional[str] = None
+    ) -> str:
+        if image_path is None and image_data is None:
+            raise ValueError("Either image_path or image_data must be provided")
+        if image_path is not None:
+            with open(image_path, "rb") as img:
+                image_data = base64.b64encode(img.read()).decode("utf-8")
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -83,7 +126,7 @@ class OpenAILLM(LLM):
                     "system",
                     "What are the objects in this image? Please only "
                     "list out the objects, without any other "
-                    "details.",
+                    "details. The output should be a comma separated list. ",
                 ),
                 (
                     "user",
@@ -110,7 +153,7 @@ class OpenAILLM(LLM):
                     "system",
                     "Which of these buckets should the given object"
                     "belong? If you think it's neither, please reply with "
-                    "neither. Only say one word which is the answer. "
+                    f"{self.EMPTY_BUCKET_STRING}. Only say one word which is the answer. "
                     f"\n buckets: {buckets_str}",
                 ),
                 (
@@ -125,7 +168,7 @@ class OpenAILLM(LLM):
         return resp.content
 
     @override
-    def suggest_bucket(self, buckets, asset_name):
+    def suggest_bucket(self, buckets: List[str], asset_name: str) -> str:
         buckets_str: str = ",".join(buckets)
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -133,6 +176,7 @@ class OpenAILLM(LLM):
                     "system",
                     "Suggest a new bucket which is better suited for the given object. "  # noqa
                     "Only reply with the new suggested bucket name please. "
+                    "Make sure the new bucket is not in the provided list. "  # noqa
                     "Bucket names can have multiple words, if they do they are "  # noqa
                     "space separated, for example 'Gardening Tools'"
                     f"\n buckets: {buckets_str}",
@@ -145,6 +189,75 @@ class OpenAILLM(LLM):
         )
         chain = prompt | self.model
         resp: BaseMessage = chain.invoke({"asset_name": asset_name})
+        assert isinstance(resp.content, str)
+        return resp.content
+
+    @override
+    def find_sub_buckets(self, buckets: List[str], target_bucket: str) -> str:
+        buckets_str: str = ",".join(buckets)
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "Which of these categories are sub-categories of the provided base category? "
+                    "A sub-category is a category that is more granular than the base category. "
+                    "A sub-category and category have an is-a relationship. "
+                    "For example, 'Gardening Tools' is a sub-category of 'Tools'. "
+                    "However, 'Tools' is not a sub-category of 'Gardening Tools'. "
+                    f"If none of the potential sub-categories are applicable, please reply with '{self.EMPTY_BUCKET_STRING}'. "
+                    "Only reply with the category names as a comma separated list. "
+                    f"\n Base Category: {target_bucket} \n Potential Sub-Categories: {buckets_str}",
+                )
+            ]
+        )
+        chain = prompt | self.model
+        resp: BaseMessage = chain.invoke({})
+        assert isinstance(resp.content, str)
+        return resp.content
+
+    @override
+    def expand_bucket(self, buckets: List[str], target_bucket: str) -> str:
+        buckets_str: str = ",".join(buckets)
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "Expand the provided base category into upto 3 granular categories. "
+                    "None of these new categories should be present in the provided category list. "
+                    "A granular category is a category that is more specific than the base category. "
+                    "For example, 'Power Tools' & 'Gardening Tools' are granular categories of 'Tools'. "
+                    "Only reply with the category names as a comma separated list. "
+                    "Categories can have multiple words, if they do they are space separated, "
+                    "for example 'Gardening Tools'."
+                    f"\n Base Category: {target_bucket} \n Provided Categories: {buckets_str}",
+                )
+            ]
+        )
+        chain = prompt | self.model
+        resp: BaseMessage = chain.invoke({})
+        assert isinstance(resp.content, str)
+        return resp.content
+
+    @override
+    def merge_buckets(self, buckets: List[str]) -> str:
+        buckets_str: str = ",".join(buckets)
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    "Merge the provided granular categories into a single broader category. "
+                    "A broader category is a category that encompasses the provided granular categories. "
+                    "Each of the provided categories should be a sub-category of the merged category. "
+                    "Only reply with the merged category name. "
+                    "Category names can have multiple words, if they do then they are space separated, "
+                    "for example 'Gardening Tools'."
+                    f"\n Provided Categories: {buckets_str}",
+                )
+            ]
+        )
+        chain = prompt | self.model
+        resp: BaseMessage = chain.invoke({})
+        assert isinstance(resp.content, str)
         return resp.content
 
 

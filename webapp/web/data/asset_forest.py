@@ -33,7 +33,7 @@ from typing import Any, List, Dict, Optional, Union
 import uuid
 from openai import images
 from pyre_extensions import override
-from ..llm.llm_engine import LLM_ENGINE as llm
+from llm.llm_engine import LLM_ENGINE as llm
 import logging
 import json
 
@@ -121,6 +121,12 @@ class Node(ABC):
     def add_edge(self, node_id: PID, disable_commit: bool = False) -> None:
         self.edge_validation(node_id)
         self.edges.append(node_id)
+        self.update_time = time.time()
+        if not disable_commit:
+            self.commit()
+
+    def remove_edge(self, node_id: PID, disable_commit: bool = False) -> None:
+        self.edges.remove(node_id)
         self.update_time = time.time()
         if not disable_commit:
             self.commit()
@@ -395,6 +401,12 @@ class User(Node):
             raise RuntimeError("No valid image source provided")
 
         self.add_edge(image_obj.id)
+        asset_names: List[str] = llm.describe_image(
+            image_data=image_obj.image_data
+        ).split(",")
+        for asset_name in asset_names:
+            asset: Asset = Asset(asset_name)
+            self.consume(asset)
 
         return image_obj
 
@@ -432,7 +444,7 @@ class User(Node):
                     q.appendleft((next_node_id, cur_level + 1))
         return levels
 
-    def _dfs(self, cur: Node, asset: Node) -> None:
+    def _dfs(self, cur: Node, node: Node) -> None:
         if isinstance(cur, Asset):
             raise RuntimeError(
                 "We seem to have traversed down to an existing Asset while consuming this Asset"  # noqa
@@ -441,42 +453,98 @@ class User(Node):
         buckets: List[str] = []
         name_to_id_mapping: Dict[str, PID] = {}
         for child_id in cur.edges:
-            if child_id.ptype in [Asset.__name__, Image.__name__]:
-                # no need to visit Asset nodes or Images
+            # no need to visit Images
+            if child_id.ptype in [Image.__name__]:
                 continue
+
+            # no need to visit Assets when we are consuming an Asset
+            if child_id.ptype in [Asset.__name__]:
+                if node.id.ptype == Asset.__name__:
+                    continue
 
             child: Node = Node.from_id(child_id)
             child_str: str = child.name
             buckets.append(child_str)
-            name_to_id_mapping[child_str] = child_id
+            name_to_id_mapping[child_str.lower().strip()] = child_id
+
+        if node.name.lower().strip() in name_to_id_mapping:
+            # If the Asset already exists in the tree, we don't need to do anything
+            # and can just return
+            return
 
         response: str = ""
         if len(buckets) == 0:
             # No edges to any descriptors
             LOGGER.warning(f"No edges to any descriptors! cur: {cur.name}")  # noqa
-            cur.add_edge(asset.id)
+            cur.add_edge(node.id)
             return
-        response = llm.find_bucket(buckets=buckets, asset_name=asset.name)  # noqa
+        response = llm.find_bucket(buckets=buckets, asset_name=node.name)  # noqa
         LOGGER.info(f"Found bucket: {response}")
-        if response in name_to_id_mapping:
+        if response.lower().strip() in name_to_id_mapping:
             # In case llm responds with an existing bucket
             # continue DFS into child
-            self._dfs(Node.from_id(name_to_id_mapping[response]), asset)
+            return self._dfs(
+                Node.from_id(name_to_id_mapping[response.lower().strip()]), node
+            )
         elif response.lower() == llm.EMPTY_BUCKET_STRING.lower():
             assert (
                 len(buckets) > 0
             ), "buckets has to have elements at this point"  # noqa
-            new_bucket_name: str = llm.suggest_bucket(
-                buckets=buckets, asset_name=asset.name
-            )
-            LOGGER.info(f"Suggest creating bucket: {new_bucket_name}")
-            # create a new descriptor (i.e a bucket)
-            new_node = Descriptor(new_bucket_name)
-            # Add edge from parent to new descriptor
-            cur.add_edge(new_node.id)
-            # Add an edge from new descriptor to Asset being added to tree
-            new_node.add_edge(asset.id)
-            return
+            if node.id.ptype == Asset.__name__:
+                new_bucket_name: str = llm.suggest_bucket(
+                    buckets=buckets, asset_name=node.name
+                )
+                LOGGER.info(f"Suggest creating bucket: {new_bucket_name}")
+                if new_bucket_name.lower().strip() in name_to_id_mapping:
+                    # The suggested bucket already exists, so we can just
+                    # add the asset to that bucket
+                    return self._dfs(
+                        Node.from_id(name_to_id_mapping[response.lower().strip()]), node
+                    )
+                # create a new descriptor (i.e a bucket)
+                new_node = Descriptor(new_bucket_name)
+                # Add edge from parent to new descriptor
+                cur.add_edge(new_node.id)
+                # Add an edge from new descriptor to Asset being added to tree
+                new_node.add_edge(node.id)
+                return
+            else:  # Node is a Descriptor
+                sub_buckets: List[str] = llm.find_sub_buckets(
+                    buckets=buckets, target_bucket=node.name
+                ).split(",")
+
+                if len(sub_buckets) == 0:
+                    # An error occurred, since LLM should at least return "neither"
+                    raise RuntimeError(
+                        f"LLM returned no sub buckets for bucket:{node.name}, sub buckets:{buckets}"  # noqa
+                    )
+                elif (
+                    len(sub_buckets) == 1
+                    and sub_buckets[0].lower() == llm.EMPTY_BUCKET_STRING.lower()
+                ):
+                    # None of the sub buckets match the bucket so the bucket
+                    # can be a direct child of current node
+                    LOGGER.info("No sub buckets found, adding directly to parent")
+                    cur.add_edge(node.id)
+                    return
+                else:
+                    # LLM returned some sub buckets, so we need to add the
+                    # descriptor as a child of the current node and then add
+                    # the sub buckets as children of the descriptor
+                    LOGGER.info(
+                        f"Found sub buckets: {sub_buckets} matching bucket: {node.name}"
+                    )  # noqa
+                    cur.add_edge(node.id)
+                    for sub_bucket in sub_buckets:
+                        assert (
+                            sub_bucket.lower().strip() in name_to_id_mapping
+                        ), f"Sub bucket {sub_bucket} not found in buckets {buckets}!"  # noqa
+                        # remember to remove the edge from the parent
+                        # TODO: We can probably reduce DB operations by not commiting everytime
+                        # and instead only commit once at the end of the _dfs operation
+                        cur.remove_edge(name_to_id_mapping[sub_bucket.lower().strip()])
+                        node.add_edge(name_to_id_mapping[sub_bucket.lower().strip()])
+                    return
         else:
             raise RuntimeError(
                 f"LLM returned an unsupported bucket name:{response}"
@@ -486,9 +554,13 @@ class User(Node):
     def serialize(self) -> str:
         return super().serialize()
 
-    def consume(self, asset: Asset) -> None:
+    def consume(self, node: Node) -> None:
         LOGGER.info("Begin traversal...")
-        self._dfs(self, asset)
+        assert node.id.ptype not in [
+            User.__name__,
+            Image.__name__,
+        ], "Cannot consume User or Image nodes"  # noqa
+        self._dfs(self, node)
 
     def serialize_forest(self) -> str:
         levels: List[List[str]] = self._level_order_traversal()
