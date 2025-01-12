@@ -7,7 +7,7 @@ from flask import request
 from flask_cors import CORS
 from markupsafe import escape
 
-from .web.data.asset_forest import User, Node, Image
+from webapp.web.data.asset_forest import User, Node, Image
 
 app = Flask(__name__)
 CORS(app, origins="*")
@@ -23,7 +23,6 @@ def login():
     user: Optional[User] = None
     username: Optional[str] = request.json.get("username")  # type: ignore
     password: Optional[str] = request.json.get("password")  # type: ignore
-    print(f"Logging for request params: {request.json}")
     try:
         user = User.login(user_name=escape(username), password=escape(password))
     except AssertionError as e:
@@ -33,6 +32,28 @@ def login():
             return {"success": "no"}
 
     return {"success": "yes"} | json.loads(user.serialize())
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    user: Optional[User] = None
+    username: Optional[str] = request.json.get("username")  # type: ignore
+    password: Optional[str] = request.json.get("password")  # type: ignore
+    try:
+        user = User.login(user_name=escape(username), password=escape(password))
+    except AssertionError as e:
+        print(f"Login error, user doesn't seem to exist: {username}")
+        print("Registering user")
+
+    if user is None:
+        try:
+            user = User.register(user_name=escape(username), password=escape(password))
+            return {"success": "yes", "existence": "no"} | json.loads(user.serialize())
+        except AssertionError as e:
+            print(f"Error registering user: {username}")
+            return {"success": "no", "existence": "no"}
+
+    return {"success": "yes", "existence": "yes"} | json.loads(user.serialize())
 
 
 @app.route("/upload", methods=["POST"])

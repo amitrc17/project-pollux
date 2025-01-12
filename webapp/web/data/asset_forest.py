@@ -33,7 +33,7 @@ from typing import Any, List, Dict, Optional, Union
 import uuid
 from openai import images
 from pyre_extensions import override
-from llm.llm_engine import LLM_ENGINE as llm
+from webapp.web.llm.llm_engine import LLM_ENGINE as llm
 import logging
 import json
 
