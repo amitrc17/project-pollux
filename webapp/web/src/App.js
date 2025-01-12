@@ -89,11 +89,39 @@ function FileUploader({ userData, setImageData }) {
   );
 }
 
+function DescriptorUploader({ userData, setDescriptorData }) {
+  const handleSubmit = async (event) => {
+    event.preventDefault(); // Prevent default form submission behavior
+    const formData = new FormData();
+    formData.append('userid', userData.id);
+    formData.append('descriptor_name', event.target.descriptor.value);
+    const response = await axios.post(
+      '/add_descriptor',
+      formData,
+      {
+        headers: {
+        'Content-Type': 'multipart/form-data',
+        },
+      });
+
+    const data = response.data;
+    console.log(data);
+    setDescriptorData(data);
+  }
+  return (
+    <form onSubmit={handleSubmit}>
+      <input type="text" name="descriptor" />
+      <button type="submit" value="Upload">Add Asset Category</button>
+    </form>
+  );
+}
+
 
 function App() {
   // const [message, setMessage] = useState("Something");
   const [userData, setUserData] = useState(null);
   const [imageData, setImageData] = useState(null);
+  const [descriptorData, setDescriptorData] = useState(null);
 
   // useEffect(() => { 
   //   fetch('/message')
@@ -117,6 +145,10 @@ function App() {
                 <FileUploader userData={userData} setImageData={setImageData} />
                 {imageData && imageData.success === "yes" && <p>{imageData.id} Uploaded</p>}
                 {imageData && imageData.success === "no" && <p>Upload Failed!</p>}
+                <br />
+                <DescriptorUploader userData={userData} setDescriptorData={setDescriptorData} />
+                {descriptorData && descriptorData.success === "yes" && <p>Descriptor Added: { descriptorData.descriptorid.split(":")[1]}</p>}
+                {descriptorData && descriptorData.success === "no" && <p>Failed to add Descriptor!</p>}
                 <br />
                 <button>View Asset Tree</button>
               </div>
