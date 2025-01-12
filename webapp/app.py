@@ -7,7 +7,7 @@ from flask import request
 from flask_cors import CORS
 from markupsafe import escape
 
-from webapp.web.data.asset_forest import User, Node, Image
+from webapp.web.data.asset_forest import User, Node, Image, Descriptor
 
 app = Flask(__name__)
 CORS(app, origins="*")
@@ -79,3 +79,29 @@ def upload_image():
 
     print(f"Image uploaded with id: {image.id.serialize()}")
     return {"success": "yes"} | json.loads(image.serialize())
+
+
+@app.route("/add_descriptor", methods=["POST"])
+def add_descriptor():
+    user: Optional[Node] = None
+    userid: Optional[str] = request.form.get("userid")  # type: ignore
+    if userid is None:
+        return {"success": "no", "message": "Userid not passed"}
+    user = Node.from_id(userid)
+    if user is None:
+        return {
+            "success": "no",
+            "message": f"User not found, check the userid passed: {userid}",
+        }
+
+    assert isinstance(user, User)
+    descriptor_name: Optional[str] = request.form.get("descriptor_name")
+    if descriptor_name is None:
+        return {"success": "no", "message": "Descriptor name not passed"}
+    descriptor: Descriptor = Descriptor(name=descriptor_name)
+    User.consume(user, descriptor)
+    return (
+        {"success": "yes"}
+        | {"userid": user.id.serialize()}
+        | {"descriptorid": descriptor.id.serialize()}
+    )
