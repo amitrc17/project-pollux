@@ -9,21 +9,39 @@ function LoginForm({ userData, setUserData }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault(); // Prevent default form submission behavior
-    const response = await fetch('/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({ username, password }),
-    });
+    if (event.nativeEvent.submitter.value === "login") {
+      const response = await fetch('/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ username, password }),
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to sign in')
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to sign in')
+      }
+      const data = await response.json();
+      setUserData(data);
+    } else if (event.nativeEvent.submitter.value === "register") {
+      const response = await fetch('/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to register')
+      }
+      const data = await response.json();
+      setUserData(data);
     }
-    const data = await response.json();
-    setUserData(data);
   };
   return (
     <form onSubmit={handleSubmit }>
@@ -37,7 +55,8 @@ function LoginForm({ userData, setUserData }) {
         <input type="password" name="password" onChange={(e) => setPassword(e.target.value)}/>
       </label>
       <br />
-      <button type="submit" value="Login Or Register">Submit</button>
+      <button type="submit" value="login">Login</button>
+      <button type="submit" value="register">Register</button>
     </form>
   );
 }
@@ -119,7 +138,7 @@ function App() {
           Login or Register to access Pollux
         </p>
         <LoginForm userData={userData} setUserData={setUserData} />
-        {userData && userData.success === "no" && <p>Failed to login</p>}
+        {userData && userData.success === "no" && <p>Failed to login, you might need to register...</p>}
       </header>
     </div>
   );
