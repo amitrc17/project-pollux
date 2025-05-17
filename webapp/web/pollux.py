@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # pyre-strict
 
-from typing import List
+from typing import Dict, List, Union
 from llm.llm_engine import OpenAILLM
 from data.asset_forest import PID, User, Descriptor, Asset, Node, Image
 
@@ -195,6 +195,18 @@ def test_image_upload() -> None:
     print(f"Serialized tree: {user.serialize_forest()}")
 
 
+def test_user_asset_tree_visualization() -> None:
+    print("User login...")
+    user: User = User.login("amitrc", "password12")
+    print("User logged in")
+    nodes_info: List[Dict[str, Union[str, int]]] = (
+        user.get_asset_tree_info_for_visualization()
+    )
+    print(f"Total nodes found: {len(nodes_info)}")
+    for node_info in nodes_info:
+        print(f"Node info: {node_info}")
+
+
 if __name__ == "__main__":
     # test_user_register("amitrc", "password12")
     # test_user_login("amitrc", "password8")
@@ -209,4 +221,5 @@ if __name__ == "__main__":
     # image_data: Optional[str] = ImageStore().get("Image:18041440")
     # assert image_data is not None, "Image data not found"
     # print(f"Length of Image data: {len(image_data)}")
-    test_image_upload()
+    # test_image_upload()
+    test_user_asset_tree_visualization()

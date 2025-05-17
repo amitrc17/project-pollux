@@ -1,13 +1,13 @@
 from typing import List
 from csv import Error
 import json
-from typing import Optional
+from typing import Dict, Optional, Union
 from flask import Flask
 from flask import request
 from flask_cors import CORS
 from markupsafe import escape
 
-from webapp.web.data.asset_forest import User, Node, Image, Descriptor
+from webapp.web.data.asset_forest import User, Node, Image, Descriptor, PID
 
 app = Flask(__name__)
 CORS(app, origins="*")
@@ -105,3 +105,30 @@ def add_descriptor():
         | {"userid": user.id.serialize()}
         | {"descriptorid": descriptor.id.serialize()}
     )
+
+
+@app.route("/get_asset_tree", methods=["GET", "POST"])
+def get_asset_tree():
+    """
+    Get all the information required to display the asset tree for a user.
+    This includes: level sorted nodes, asset/descriptor names, and parent-child relationships.
+    """
+    user: Optional[Node] = None
+    userid: Optional[str] = request.json.get("userid")  # type: ignore
+    if userid is None:
+        return {"success": "no", "message": "Userid not passed"}
+    user = Node.from_id(PID.deserialize(userid))
+    if user is None:
+        return {
+            "success": "no",
+            "message": f"User not found, check the userid passed: {userid}",
+        }
+    assert isinstance(user, User)
+    nodes_info: List[Dict[str, Union[str, int]]] = (
+        user.get_asset_tree_info_for_visualization()
+    )
+    return {
+        "success": "yes",
+        "message": "Asset tree information retrieved successfully",
+        "nodes_info": nodes_info,
+    }
