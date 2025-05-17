@@ -2,23 +2,23 @@
 
 
 """
-    An Asset Forest is a representation of the possessions of a user
-    as tracked by Pollux. The entire forest belongs to 1 user. Every
-    Tree in the forest is rooted at a relatively high level category. We
-    cannot predict all categories, so they are always dynamically created.
+An Asset Forest is a representation of the possessions of a user
+as tracked by Pollux. The entire forest belongs to 1 user. Every
+Tree in the forest is rooted at a relatively high level category. We
+cannot predict all categories, so they are always dynamically created.
 
-    All non-leaf nodes in the forest are Descriptors, however some Descriptors
-    might be leaf nodes. Descriptors that are leaf nodes indicate the User does
-    not possess any Asset fitting that Description. Descriptors may describe:
-    Location, Usage, Physical Attributes, Compositional Attributes, and any
-    other categorical information. Descriptors are tailored to the single
-    owner User, i.e 2 users may have the same Descriptor that has different
-    paths from the User to that particular Descriptor. 
-    We will eventually use domain knowledge, user input
-    and ML to split and splice Descriptors.
+All non-leaf nodes in the forest are Descriptors, however some Descriptors
+might be leaf nodes. Descriptors that are leaf nodes indicate the User does
+not possess any Asset fitting that Description. Descriptors may describe:
+Location, Usage, Physical Attributes, Compositional Attributes, and any
+other categorical information. Descriptors are tailored to the single
+owner User, i.e 2 users may have the same Descriptor that has different
+paths from the User to that particular Descriptor.
+We will eventually use domain knowledge, user input
+and ML to split and splice Descriptors.
 
-    Assets are leaf nodes. These represent the User's possessions. These likely
-    came from User inputs: image, text, chat.
+Assets are leaf nodes. These represent the User's possessions. These likely
+came from User inputs: image, text, chat.
 """
 
 import base64
@@ -29,7 +29,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections import deque
 from random import randint
-from typing import Any, List, Dict, Optional, Union
+from typing import Any, List, Dict, Optional, Set, Tuple, Union
 import uuid
 from openai import images
 from pyre_extensions import override
@@ -425,10 +425,14 @@ class User(Node):
 
         return images
 
-    def _level_order_traversal(self) -> List[List[str]]:
+    def _level_order_traversal(
+        self,
+    ) -> Tuple[List[List[PID]], Dict[PID, PID], List[PID]]:
         q = deque([(self.id, 1)])
         vis = {self.id}
-        levels: List[List[str]] = []
+        levels: List[List[PID]] = []
+        parents: Dict[PID, PID] = {}
+        leaves: List[PID] = []
 
         while len(q) > 0:
             node_id, cur_level = q.pop()
@@ -436,13 +440,19 @@ class User(Node):
             if len(levels) < cur_level:
                 levels.append([])
 
-            levels[-1].append(node.name)
+            levels[-1].append(node.id)
+            has_children: bool = False
             for next_node_id in node.edges:
                 # We don't want to visit Images
                 if next_node_id not in vis and next_node_id.ptype != Image.__name__:
+                    has_children = True
+                    parents[next_node_id] = node_id
                     vis.add(next_node_id)
                     q.appendleft((next_node_id, cur_level + 1))
-        return levels
+
+            if not has_children:
+                leaves.append(node_id)
+        return levels, parents, leaves
 
     def _dfs(self, cur: Node, node: Node) -> None:
         if isinstance(cur, Asset):
@@ -563,9 +573,71 @@ class User(Node):
         self._dfs(self, node)
 
     def serialize_forest(self) -> str:
-        levels: List[List[str]] = self._level_order_traversal()
+        # Since level order traversal returns both the levels and the parents
+        # we only use the levels and pull out the names from the concrete Node
+        # objects.
+        levels_pid: List[List[PID]] = self._level_order_traversal()[0]
+        levels: List[List[str]] = []
+        for level in levels_pid:
+            levels.append([Node.from_id(x).name for x in level])
         ret: str = ""
         for level in levels:
             ret += "\n" + "\t".join(level)
 
         return ret
+
+    def get_asset_tree_info_for_visualization(
+        self,
+    ) -> List[Dict[str, Union[str, int]]]:
+        """
+        A utility function to get all nodes of the asset tree in level order as well
+        as edge mapping (as a parent-child mapping) of the tree. This is useful for
+        visualizing the tree.
+        """
+        levels, parents, leaves = self._level_order_traversal()
+        nodes_info: List[Dict[str, Union[str, int]]] = []
+        cur_level: int = len(levels)
+        h_levels: Dict[PID, int] = {}
+
+        # Assign h_level to leaves first.
+        # All leaves are incrementally assigned h_levels
+        # This dictates the total width of the tree. All non-leaf nodes will have
+        # h_levels assigned based on the average of their children's h_levels
+        for idx, leaf in enumerate(leaves):
+            h_levels[leaf] = idx + 1
+        leaves_set: Set[PID] = set(leaves)
+
+        # We go level-wise from bottom to top to make sure all children of a node
+        # are processed before the node itself.
+        for level in levels[::-1]:
+            for node_id in level:
+                node: Node = Node.from_id(node_id)
+
+                # All nodes being processed at this point should have h_level assigned
+                assert (
+                    h_levels.get(node_id, -1) != -1
+                ), f"Horizontal level not found for node: {node_id.serialize()} during processing!!"
+
+                # For non-leaf nodes, assign the average of their children's h_levels.
+                # The sum of h_levels of all children is already assigned to the current node.
+                # We must process the current node before sending the h_level to the parent.
+                if node_id not in leaves_set:
+                    h_levels[node_id] = h_levels[node_id] // len(node.edges)
+
+                node_info: Dict[str, Union[str, int]] = {
+                    "id": node_id.serialize(),
+                    "label": node.name,
+                    "horizontal_level": h_levels[node_id],
+                    "vertical_level": cur_level,
+                    "type": node.id.ptype,
+                }
+                # Add to the h_level of the parent node to maintain the sum of children
+                if parents.get(node_id) is not None:
+                    h_levels[parents[node_id]] = (
+                        h_levels.get(parents[node_id], 0) + h_levels[node_id]
+                    )
+                    # Root node will not have a parent so we place this assignment here
+                    node_info["parent"] = parents[node_id].serialize()
+                nodes_info.append(node_info)
+            cur_level -= 1
+        return nodes_info
