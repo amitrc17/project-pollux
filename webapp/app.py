@@ -7,7 +7,7 @@ from flask import request
 from flask_cors import CORS
 from markupsafe import escape
 
-from webapp.web.data.asset_forest import User, Node, Image, Descriptor, PID
+from webapp.web.data.nodes.user import User, Node, Image, Descriptor, PID, NodeFactory
 
 app = Flask(__name__)
 CORS(app, origins="*")
@@ -62,7 +62,7 @@ def upload_image():
     userid: Optional[str] = request.form.get("userid")  # type: ignore
     if userid is None:
         return {"success": "no", "message": "Userid not passed"}
-    user = Node.from_id(userid)
+    user = Node.from_id(userid, NodeFactory())
     if user is None:
         return {"success": "no", "message": "User not found, check the userid passed"}
 
@@ -87,7 +87,7 @@ def add_descriptor():
     userid: Optional[str] = request.form.get("userid")  # type: ignore
     if userid is None:
         return {"success": "no", "message": "Userid not passed"}
-    user = Node.from_id(userid)
+    user = Node.from_id(userid, NodeFactory())
     if user is None:
         return {
             "success": "no",
@@ -117,7 +117,7 @@ def get_asset_tree():
     userid: Optional[str] = request.json.get("userid")  # type: ignore
     if userid is None:
         return {"success": "no", "message": "Userid not passed"}
-    user = Node.from_id(PID.deserialize(userid))
+    user = Node.from_id(PID.deserialize(userid), NodeFactory())
     if user is None:
         return {
             "success": "no",

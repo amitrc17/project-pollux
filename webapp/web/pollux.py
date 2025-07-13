@@ -3,7 +3,7 @@
 
 from typing import Dict, List, Union
 from llm.llm_engine import OpenAILLM
-from data.asset_forest import PID, User, Descriptor, Asset, Node, Image
+from data.nodes.user import PID, User, Descriptor, Asset, Node, Image, NodeFactory
 
 from data.database import NodeDB, ImageStore
 
@@ -122,7 +122,7 @@ def test_database_get_put():
     print("Performing DB operations...")
     ndb = NodeDB(verbose=True)
     ndb.set(user.id.serialize(), user.serialize())
-    res: Node = Node.from_id(user.id)
+    res: Node = Node.from_id(user.id, NodeFactory())
     print(f"Final result from db: {res.serialize()}")
 
 
@@ -140,26 +140,26 @@ def test_serialize_deserialize_nodes():
     user_serial = user.serialize()
     print(f"Serialized User: {user_serial}")
     print("Deserializing user ...")
-    user_deserial = Node.deserialize(user_serial)
+    user_deserial = Node.deserialize(user_serial, NodeFactory())
     print(f"Final User: {user_deserial.serialize()}")
 
     descriptor_serial = appliance_category.serialize()
     print(f"Serialized descriptor: {descriptor_serial}")
     print("Deserializing descriptor ...")
-    descriptor_deserial = Node.deserialize(descriptor_serial)
+    descriptor_deserial = Node.deserialize(descriptor_serial, NodeFactory())
     print(f"Final descriptor: {descriptor_deserial.serialize()}")
 
     asset_serial = asset.serialize()
     print(f"Serialized asset: {asset_serial}")
     print("Deserializing asset ...")
-    asset_deserial = Node.deserialize(asset_serial)
+    asset_deserial = Node.deserialize(asset_serial, NodeFactory())
     print(f"Final asset: {asset_deserial.serialize()}")
 
 
 def test_user_load(asset_name: str) -> None:
     assert asset_name != "", "Please provide a valid asset name"
     new_asset: Asset = Asset(asset_name)
-    user: Node = Node.from_id("User:2263816597")
+    user: Node = Node.from_id("User:2263816597", NodeFactory())
     assert isinstance(user, User)
     user.consume(new_asset)
     print(f"Serialized User tree: {user.serialize_forest()}")
