@@ -10,13 +10,14 @@ quick search in mysql.
 """
 
 from csv import Error
-from typing import Any, List, Optional
+from typing import Any, List, Optional, override
 from abc import ABC, abstractmethod
+from unittest import result
 import redis
 import sqlite3
 
-from pyre_extensions import override
 import logging
+
 
 logging.basicConfig(level=logging.INFO)
 LOGGER = logging.getLogger("pollux")
@@ -26,10 +27,25 @@ class Database(ABC):
 
     @abstractmethod
     def get(self, serialized_id: str) -> Optional[str]:
+        """
+        Get a record from the database.
+        """
         pass
 
     @abstractmethod
-    def set(self, serialized_data: str) -> bool:
+    def set(self, serialized_id: str, serialized_data: str) -> bool:
+        """
+        Set a record in the database.
+        Returns True if set was successful, False otherwise.
+        """
+        pass
+
+    @abstractmethod
+    def delete(self, serialized_id: str) -> bool:
+        """
+        Delete a record from the database.
+        Returns True if deletion was successful, False otherwise.
+        """
         pass
 
 
@@ -57,11 +73,20 @@ class ImageStore(Database):
                 print("Reading db...")
             cursor: sqlite3.Cursor = connection.cursor()
             select_sql: str = (
-                "SELECT image_handle, img FROM image_store WHERE image_handle = ?"
+                """
+                    SELECT 
+                        image_handle, 
+                        img 
+                    FROM 
+                        image_store 
+                    WHERE 
+                image_handle = ?
+                """.strip()
             )
             cursor.execute(select_sql, (image_handle,))
             image_data: List[Any] = cursor.fetchall()
-            print(f"Length image data:::: {len(image_data)}")
+            if self.verbose:
+                print(f"Found {len(image_data)} image(s) for handle: {image_handle}")
             assert (
                 len(image_data) <= 1
             ), f"There shouldn't be 2 or more images for given handle: {image_handle}. Found: {len(image_data)}"
@@ -76,13 +101,14 @@ class ImageStore(Database):
         finally:
             if connection:
                 connection.close()
+            return None
 
     @override
     def set(self, image_handle: str, image_data: str) -> bool:
         try:
             connection: sqlite3.Connection = sqlite3.connect("images.db")
             if self.verbose:
-                print("writing to db...")
+                print("writing to Image Store...")
             cursor: sqlite3.Cursor = connection.cursor()
             cursor.execute(
                 "CREATE TABLE IF NOT EXISTS image_store (image_handle TEXT PRIMARY KEY, img BLOB NOT NULL)"
@@ -100,9 +126,32 @@ class ImageStore(Database):
             )
             connection.commit()
             cursor.close()
+            if self.verbose:
+                print("Write Successful!")
             return True
         except sqlite3.Error as e:
+            if self.verbose:
+                print("Write Failed!")
             LOGGER.error(f"Error writing image to Image Store: {e}")
+        finally:
+            if connection:
+                connection.close()
+            return False
+
+    @override
+    def delete(self, image_handle: str) -> bool:
+        try:
+            connection: sqlite3.Connection = sqlite3.connect("images.db")
+            cursor: sqlite3.Cursor = connection.cursor()
+            if self.verbose:
+                print("Deleting from Image Store...")
+            delete_query: str = "DELETE FROM image_store WHERE image_handle = ?"
+            cursor.execute(delete_query, (image_handle,))
+            connection.commit()
+            cursor.close()
+            return True
+        except sqlite3.Error as e:
+            LOGGER.error(f"Error deleting image from Image Store: {e}")
         finally:
             if connection:
                 connection.close()
@@ -130,20 +179,34 @@ class UserDB(Database):
     @override
     def get(self, hash: str) -> Optional[str]:
         if self.verbose:
-            print("Reading db...")
+            print(f"Reading UDB for {hash} ...")
         user_id: Any = UserDB.RDB.get(hash)
+        if self.verbose:
+            if user_id is None:
+                print(f"No user found for hash {hash}")
+            else:
+                assert isinstance(user_id, str)
+                print(f"Found user {user_id} for hash {hash}")
         return user_id
 
     @override
     def set(self, hash: str, user_id: str) -> bool:
         if self.verbose:
-            print("writing to db...")
-        if self.verbose:
-            print(f"DB Payload: {user_id}")
-            print(f"DB Key: {hash}")
-        ret: Any = NodeDB.RDB.set(hash, user_id)
+            print(f"writing to UDB for {hash} ...")
+        ret: Any = UserDB.RDB.set(hash, user_id)
         assert isinstance(ret, bool)
+        if self.verbose:
+            result: str = "Successful" if ret else "Failed"
+            print(f"Write {result}!")
         return ret
+
+    @override
+    def delete(self, hash: str) -> bool:
+        if self.verbose:
+            print("Deleting from UDB...")
+        ret: Any = UserDB.RDB.delete(hash)
+        assert isinstance(ret, int)
+        return ret > 0  # Returns number of keys deleted, should be 1 if successful
 
 
 class NodeDB(Database):
@@ -170,20 +233,33 @@ class NodeDB(Database):
         self.verbose: bool = verbose
 
     @override
-    def get(self, serialized_id: str) -> str:
+    def get(self, serialized_id: str) -> Optional[str]:
         if self.verbose:
-            print("Reading db...")
+            print(f"Reading NDB for ID {serialized_id} ...")
         serialized_data: Any = NodeDB.RDB.get(serialized_id)
-        assert isinstance(serialized_data, str)
+        if self.verbose:
+            if serialized_data is None:
+                print(f"No data found for ID {serialized_id}")
+            else:
+                assert isinstance(serialized_data, str)
+                print(f"Found data for ID {serialized_id}")
         return serialized_data
 
     @override
     def set(self, serialized_id: str, serialized_data: str) -> bool:
         if self.verbose:
-            print("writing to db...")
-        if self.verbose:
-            print(f"DB Payload: {serialized_data}")
-            print(f"DB Key: {serialized_id}")
+            print(f"writing to NDB for ID {serialized_id} ...")
         ret: Any = NodeDB.RDB.set(serialized_id, serialized_data)
         assert isinstance(ret, bool)
+        if self.verbose:
+            result: str = "Successful" if ret else "Failed"
+            print(f"Write {result}!")
         return ret
+
+    @override
+    def delete(self, serialized_id: str) -> bool:
+        if self.verbose:
+            print(f"Deleting from NDB for ID {serialized_id} ...")
+        ret: Any = NodeDB.RDB.delete(serialized_id)
+        assert isinstance(ret, int)
+        return ret > 0  # Returns number of keys deleted, should be 1 if successful

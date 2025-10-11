@@ -1,5 +1,4 @@
 from typing import List
-from csv import Error
 import json
 from typing import Dict, Optional, Union
 from flask import Flask

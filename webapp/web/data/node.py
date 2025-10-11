@@ -2,10 +2,10 @@
 # pyre-strict
 import time
 from abc import ABC, abstractmethod
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 import json
 
-from .database import NodeDB
+from .database import NodeDB, UserDB
 from .pid import PID
 from .factories.factory import Factory
 
@@ -17,6 +17,11 @@ from .factories.factory import Factory
     For now, edges themselves are logical constructs and don't have
     an explicit representation. Nodes store connections as a raw list of
     PIDs that they are connected to.
+    
+    Edges are not bidirectional, i.e if Node A has an edge to Node B,
+    Node B does not have an edge to Node A. This is a design choice to
+    simplify the edge management logic. This is not enforced at the node level,
+    so it is up to you to ensure that this assumption holds true.
 """
 
 
@@ -117,5 +122,17 @@ class Node(ABC):
         if isinstance(node_id, str):
             node_id = PID.deserialize(node_id)
         assert isinstance(node_id, PID)
-        serilaized_result: str = ndb.get(node_id.serialize())
-        return Node.deserialize(serilaized_result, factory)
+        serialized_result: Optional[str] = ndb.get(node_id.serialize())
+        if serialized_result is None:
+            raise ValueError(f"Node with id {node_id.serialize()} not found in NDB")
+        return Node.deserialize(serialized_result, factory)
+
+    @classmethod
+    def delete(cls, node_id: Union[PID, str]) -> bool:
+        ndb = NodeDB()
+        if isinstance(node_id, str):
+            node_id = PID.deserialize(node_id)
+        assert isinstance(node_id, PID)
+        if node_id.ptype == "User" or node_id.ptype == "Image":
+            raise NotImplementedError("Cannot delete User or Image nodes directly yet")
+        return ndb.delete(node_id.serialize())

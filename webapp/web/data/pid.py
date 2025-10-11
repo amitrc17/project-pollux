@@ -1,6 +1,5 @@
 from random import randint
-from typing import List
-from pyre_extensions import override
+from typing import List, override
 
 """
     Universal Pollux ID. All Nodes & Edges have PIDs.
@@ -19,10 +18,11 @@ class PID(int):
     ptype: str
 
     def __new__(cls, *args, **kwargs) -> "PID":
+        self: PID
         if len(args) == 1:
-            self: PID = super().__new__(cls, randint(1, 2**32))
+            self = super().__new__(cls, randint(1, 2**32))
         else:
-            self: PID = super().__new__(cls, args[1])
+            self = super().__new__(cls, args[1])
         self.ptype = type(args[0]).__name__
         return self
 

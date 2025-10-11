@@ -2,8 +2,7 @@
 from hashlib import sha256
 from io import BufferedReader
 from collections import deque
-from typing import List, Dict, Optional, Set, Tuple, Union
-from pyre_extensions import override
+from typing import List, Dict, Optional, Set, Tuple, Union, override
 from webapp.web.llm.llm_engine import LLM_ENGINE as llm
 import logging
 
@@ -46,6 +45,7 @@ class User(Node):
         assert user_id is not None, "user not found"
 
         # pull user from Node DB
+        # TODO: Understand the implications of using Node DB over UserDB
         user: Node = Node.from_id(user_id, NodeFactory())
         assert isinstance(user, User)
         return user
@@ -94,14 +94,15 @@ class User(Node):
             or image_file_buffer is not None
             or image is not None
         ), "Need image data, image path, image file buffer or Image object to attach image"
+        image_obj: Image
         if image_path is not None:
-            image_obj: Image = Image(image_path=image_path)
+            image_obj = Image(image_path=image_path)
         elif image_file_buffer is not None:
-            image_obj: Image = Image(image_file_buffer=image_file_buffer)
+            image_obj = Image(image_file_buffer=image_file_buffer)
         elif image_data is not None:
-            image_obj: Image = Image(image_data=image_data)
+            image_obj = Image(image_data=image_data)
         elif image is not None:
-            image_obj: Image = image
+            image_obj = image
         else:
             raise RuntimeError("No valid image source provided")
 
@@ -182,6 +183,7 @@ class User(Node):
             buckets.append(child_str)
             name_to_id_mapping[child_str.lower().strip()] = child_id
 
+        # TODO: We should make this more robust!
         if node.name.lower().strip() in name_to_id_mapping:
             # If the Asset already exists in the tree, we don't need to do anything
             # and can just return
@@ -292,8 +294,8 @@ class User(Node):
         for level in levels_pid:
             levels.append([Node.from_id(x, NodeFactory()).name for x in level])
         ret: str = ""
-        for level in levels:
-            ret += "\n" + "\t".join(level)
+        for level_str in levels:
+            ret += "\n" + "\t".join(level_str)
 
         return ret
 
