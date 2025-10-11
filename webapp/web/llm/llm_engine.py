@@ -5,12 +5,11 @@ import base64
 import os
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, override
 
 from langchain_core.messages import HumanMessage, SystemMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
-from pyre_extensions import override
 
 ENV_VARIABLES: Dict[str, str] = {
     "LANGCHAIN_TRACING_V2": "true",
@@ -84,7 +83,7 @@ class LLM(ABC):
     @abstractmethod
     def merge_buckets(self, buckets: List[str]) -> str:
         """
-        Ask LLM to merge the provided granualr buckets into a single broad bucket.
+        Ask LLM to merge the provided granular buckets into a single broad bucket.
         """
         pass
 
@@ -216,7 +215,7 @@ class OpenAILLM(LLM):
         return resp.content
 
     @override
-    def expand_bucket(self, buckets: List[str], target_bucket: str) -> str:
+    def expand_bucket(self, buckets: List[str], target_bucket: str) -> List[str]:
         buckets_str: str = ",".join(buckets)
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -236,7 +235,7 @@ class OpenAILLM(LLM):
         chain = prompt | self.model
         resp: BaseMessage = chain.invoke({})
         assert isinstance(resp.content, str)
-        return resp.content
+        return resp.content.split(",")
 
     @override
     def merge_buckets(self, buckets: List[str]) -> str:
