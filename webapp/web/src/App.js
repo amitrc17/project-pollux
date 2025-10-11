@@ -3,7 +3,7 @@ import star from './star1.svg';
 import './App.css';
 import axios from 'axios';
 
-import { ReactFlow, Background } from "@xyflow/react";
+import { ReactFlow, Background, Controls } from "@xyflow/react";
 
 import '@xyflow/react/dist/style.css';
 
@@ -67,20 +67,29 @@ function AssetTree({ userData }) {
   }
 
   return (
-    <div style={{ marginTop: '20px' }} className='App-body'>
+    <div style={{ marginTop: '20px', width: '100%' }} className='App-body'>
       <form onSubmit={handleSubmit}>
-        <button type="submit" value="Get Asset Tree">Get Asset Tree</button>
+        <button className="button-secondary" type="submit" value="Get Asset Tree">View Asset Tree</button>
         <p></p>
         {nodes.length > 0 && edges.length > 0 &&
           <div style={{
             width: '90vw',
-            height: '90vh',
-            margin: '0 auto',  // Centers horizontally
-            display: 'flex',   // Enables flexbox
-            justifyContent: 'center', // Centers horizontally in flex container
-            alignItems: 'center'      // Centers vertically in flex container
+            height: '70vh',
+            margin: '20px auto',
+            border: '2px solid #61dafb',
+            borderRadius: '10px',
+            overflow: 'hidden'
           }} className='App-graph'>
-            <ReactFlow nodes={nodes} edges={edges} >
+            <ReactFlow 
+              nodes={nodes} 
+              edges={edges}
+              fitView
+              fitViewOptions={{ padding: 0.2, maxZoom: 1.5 }}
+              minZoom={0.1}
+              maxZoom={2}
+            >
+              <Background />
+              <Controls />
             </ReactFlow>
           </div>
         }
@@ -141,8 +150,8 @@ function LoginForm({ userData, setUserData }) {
         <input type="password" name="password" onChange={(e) => setPassword(e.target.value)} />
       </label>
       <br />
-      <button type="submit" value="login">Login</button>
-      <button type="submit" value="register">Register</button>
+      <button className="button-primary" type="submit" value="login">Login</button>
+      <button className="button-secondary" type="submit" value="register">Register</button>
     </form>
   );
 }
@@ -170,7 +179,7 @@ function FileUploader({ userData, setImageData }) {
   return (
     <form onSubmit={handleSubmit}>
       <input type="file" name="file" />
-      <button type="submit" value="Upload">Upload</button>
+      <button className="button-primary" type="submit" value="Upload">Upload</button>
     </form>
   );
 }
@@ -196,8 +205,8 @@ function DescriptorUploader({ userData, setDescriptorData }) {
   }
   return (
     <form onSubmit={handleSubmit}>
-      <input type="text" name="descriptor" />
-      <button type="submit" value="Upload">Add Asset Category</button>
+      <input type="text" name="descriptor" placeholder="Enter category name" />
+      <button className="button-primary" type="submit" value="Upload">Add Category</button>
     </form>
   );
 }
@@ -219,25 +228,32 @@ function App() {
     if (userData.success === "yes") {
       return (
         <div className="App">
-          <header className="App-header">
-            <img src={star} className="App-logo" alt="logo" />
-            Welcome to Pollux
-            <p className='App-header-small-text'>User: {userData.name} (ID:{userData.id.split(":")[1]})</p>
+          <header className="App-header-logged-in">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <img src={star} className="App-logo-small" alt="logo" />
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: 'bold' }}>Pollux</div>
+                <div className='App-header-small-text'>User: {userData.name} (ID:{userData.id.split(":")[1]})</div>
+              </div>
+            </div>
+            <button className="logout-button" onClick={() => setUserData(null)}>Logout</button>
           </header>
           <div className='App-body'>
-            <h4>What Should We Do?</h4>
-            <div>
-              <FileUploader userData={userData} setImageData={setImageData} />
-              {imageData && imageData.success === "yes" && <p>{imageData.id} Uploaded</p>}
-              {imageData && imageData.success === "no" && <p>Upload Failed!</p>}
-              <br />
-              <DescriptorUploader userData={userData} setDescriptorData={setDescriptorData} />
-              {descriptorData && descriptorData.success === "yes" && <p>Descriptor Added: {descriptorData.descriptorid.split(":")[1]}</p>}
-              {descriptorData && descriptorData.success === "no" && <p>Failed to add Descriptor!</p>}
-              <br />
-              <button onClick={() => setUserData(null)}>Logout</button>
-              <AssetTree userData={userData} />
+            <div className="menu-container">
+              <div className="menu-section">
+                <h4>Upload Image</h4>
+                <FileUploader userData={userData} setImageData={setImageData} />
+                {imageData && imageData.success === "yes" && <p className="success-message">{imageData.id} Uploaded</p>}
+                {imageData && imageData.success === "no" && <p className="error-message">Upload Failed!</p>}
+              </div>
+              <div className="menu-section">
+                <h4>Add Asset Category</h4>
+                <DescriptorUploader userData={userData} setDescriptorData={setDescriptorData} />
+                {descriptorData && descriptorData.success === "yes" && <p className="success-message">Descriptor Added: {descriptorData.descriptorid.split(":")[1]}</p>}
+                {descriptorData && descriptorData.success === "no" && <p className="error-message">Failed to add Descriptor!</p>}
+              </div>
             </div>
+            <AssetTree userData={userData} />
           </div>
         </div >
       );
